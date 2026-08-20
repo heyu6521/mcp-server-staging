@@ -2,7 +2,12 @@ import { AppError, type ErrorCode } from "../errors.js";
 import type { GitPlatformProvider, RepoRef } from "./types.js";
 
 type Json =
-  Record<string, unknown> | unknown[] | string | number | boolean | null;
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null;
 
 export class ForgejoProvider implements GitPlatformProvider {
   constructor(
