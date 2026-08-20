@@ -314,17 +314,109 @@ export class ForgejoProvider implements GitPlatformProvider {
     );
     return { headSha: sha, status };
   }
-  createPullRequest(ref: RepoRef, input: Record<string, unknown>) {
-    return this.request(`${this.r(ref)}/pulls`, {
+  async createPullRequest(ref: RepoRef, input: Record<string, unknown>) {
+    const requestedDraft = input.draft === true;
+    if (typeof input.title !== "string")
+      throw new AppError("invalid_input", "PR title is required", 400);
+    const title = input.title;
+    const isWipTitle = /^(?:WIP:|\[WIP\]:)/i.test(title.trimStart());
+    if (!requestedDraft && isWipTitle)
+      throw new AppError(
+        "invalid_input",
+        "A Forgejo WIP title cannot be used with draft=false",
+        400,
+      );
+    const created = await this.request(`${this.r(ref)}/pulls`, {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        title: requestedDraft && !isWipTitle ? `WIP: ${title}` : title,
+        head: input.head,
+        base: input.base,
+        ...(typeof input.body === "string" ? { body: input.body } : {}),
+      }),
     });
+    const pullNumber = (created as { number?: unknown } | null)?.number;
+    if (typeof pullNumber !== "number")
+      throw new AppError(
+        "upstream_error",
+        "Forgejo did not return the created pull-request number",
+        502,
+      );
+    const verified = await this.getPullRequest(ref, pullNumber);
+    if (
+      typeof verified === "object" &&
+      verified !== null &&
+      (verified as { draft?: unknown }).draft === requestedDraft
+    )
+      return verified;
+    try {
+      await this.request(`${this.r(ref)}/pulls/${pullNumber}`, {
+        method: "PATCH",
+        body: JSON.stringify({ state: "closed" }),
+      });
+      const closed = await this.getPullRequest(ref, pullNumber);
+      if (
+        typeof closed !== "object" ||
+        closed === null ||
+        (closed as { state?: unknown }).state !== "closed"
+      )
+        throw new Error("close postcondition failed");
+    } catch {
+      throw new AppError(
+        "upstream_error",
+        `Forgejo created PR #${pullNumber} with the wrong draft state and automatic close failed`,
+        502,
+      );
+    }
+    throw new AppError(
+      "upstream_error",
+      `Forgejo created PR #${pullNumber} with the wrong draft state; it was closed automatically`,
+      502,
+    );
   }
-  updatePullRequest(ref: RepoRef, n: number, input: Record<string, unknown>) {
-    return this.request(`${this.r(ref)}/pulls/${n}`, {
+  async updatePullRequest(
+    ref: RepoRef,
+    n: number,
+    input: Record<string, unknown>,
+  ) {
+    const existing = await this.getPullRequest(ref, n);
+    const existingTitle = (existing as { title?: unknown } | null)?.title;
+    let title =
+      typeof input.title === "string"
+        ? input.title
+        : typeof existingTitle === "string"
+          ? existingTitle
+          : undefined;
+    if (
+      input.draft === true &&
+      title !== undefined &&
+      !/^(?:WIP:|\[WIP\]:?)/i.test(title.trimStart())
+    )
+      title = `WIP: ${title}`;
+    if (input.draft === false && title !== undefined)
+      title = title.replace(/^(?:WIP:|\[WIP\]:?)\s*/i, "");
+    await this.request(`${this.r(ref)}/pulls/${n}`, {
       method: "PATCH",
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...(title !== undefined ? { title } : {}),
+        ...(typeof input.body === "string" ? { body: input.body } : {}),
+        ...(input.state === "open" || input.state === "closed"
+          ? { state: input.state }
+          : {}),
+        ...(typeof input.base === "string" ? { base: input.base } : {}),
+      }),
     });
+    const verified = await this.getPullRequest(ref, n);
+    if (
+      typeof input.draft === "boolean" &&
+      (verified as { draft?: unknown } | null)?.draft !== input.draft
+    )
+      throw new AppError(
+        "upstream_error",
+        `Forgejo did not preserve the requested draft state for PR #${n}`,
+        502,
+      );
+    return verified;
   }
   addPullRequestComment(ref: RepoRef, n: number, body: string) {
     return this.request(`${this.r(ref)}/issues/${n}/comments`, {
@@ -360,3 +452,4 @@ export class ForgejoProvider implements GitPlatformProvider {
     });
   }
 }
+

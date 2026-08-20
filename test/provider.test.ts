@@ -93,4 +93,78 @@ describe("Forgejo provider contracts", () => {
       MergeMessageField: "message",
     });
   });
+
+  it("maps draft PR creation to Forgejo 15 WIP-title semantics", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, draft: true }), {
+          status: 201,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, draft: true }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new ForgejoProvider("http://forgejo.test", "token", 1000);
+
+    await expect(
+      provider.createPullRequest(ref, {
+        owner: "ignored",
+        repo: "ignored",
+        title: "Compatibility fix",
+        head: "chatgpt/fix",
+        base: "main",
+        body: "body",
+        draft: true,
+      }),
+    ).resolves.toMatchObject({ draft: true });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "WIP: Compatibility fix",
+      head: "chatgpt/fix",
+      base: "main",
+      body: "body",
+    });
+  });
+
+  it("fails closed when Forgejo returns the wrong PR draft state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, draft: false }), {
+          status: 201,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, draft: false }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 201 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ number: 3, state: "closed" }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new ForgejoProvider("http://forgejo.test", "token", 1000);
+
+    await expect(
+      provider.createPullRequest(ref, {
+        title: "Compatibility fix",
+        head: "chatgpt/fix",
+        base: "main",
+        draft: true,
+      }),
+    ).rejects.toMatchObject({ code: "upstream_error" });
+    expect(
+      JSON.parse((fetchMock.mock.calls[2]?.[1] as RequestInit).body as string),
+    ).toEqual({
+      state: "closed",
+    });
+  });
 });
+
