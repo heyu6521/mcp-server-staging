@@ -71,20 +71,22 @@ export class ForgejoProvider implements GitPlatformProvider {
   private r({ owner, repo }: RepoRef) {
     return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   }
-  async getMe() {
+  async getMe(): Promise<{ login: string }> {
     const v = await this.request("/user");
-    if (
-      !v ||
-      Array.isArray(v) ||
-      typeof v !== "object" ||
-      typeof (v as Record<string, unknown>).login !== "string"
-    )
+    if (!v || Array.isArray(v) || typeof v !== "object")
       throw new AppError(
         "upstream_error",
         "Forgejo identity response missing login",
         502,
       );
-    return { login: (v as Record<string, string>).login };
+    const login = v.login;
+    if (typeof login !== "string")
+      throw new AppError(
+        "upstream_error",
+        "Forgejo identity response missing login",
+        502,
+      );
+    return { login };
   }
   async searchRepositories(
     query: string,
@@ -106,13 +108,14 @@ export class ForgejoProvider implements GitPlatformProvider {
   getFileContents(ref: RepoRef, path: string, gitRef?: string) {
     const q = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : "";
     return this.request(
-      `${this.r(ref)}/contents/${path.split("/").map(encodeURIComponent).join("/")}${q}`,
+      `${this.r(ref)}/contents/${path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}${q}`,
     );
   }
   listBranches(ref: RepoRef, page: number, perPage: number) {
-    return this.request(
-      `${this.r(ref)}/branches?page=${page}&limit=${perPage}`,
-    );
+    return this.request(`${this.r(ref)}/branches?page=${page}&limit=${perPage}`);
   }
   listTags(ref: RepoRef, page: number, perPage: number) {
     return this.request(`${this.r(ref)}/tags?page=${page}&limit=${perPage}`);
@@ -129,9 +132,7 @@ export class ForgejoProvider implements GitPlatformProvider {
     return this.request(`${this.r(ref)}/commits?${q}`);
   }
   getCommit(ref: RepoRef, sha: string) {
-    return this.request(
-      `${this.r(ref)}/git/commits/${encodeURIComponent(sha)}`,
-    );
+    return this.request(`${this.r(ref)}/git/commits/${encodeURIComponent(sha)}`);
   }
   searchCode(ref: RepoRef, query: string, page: number, perPage: number) {
     return this.request(
@@ -146,7 +147,10 @@ export class ForgejoProvider implements GitPlatformProvider {
   createBranch(ref: RepoRef, branch: string, from: string) {
     return this.request(`${this.r(ref)}/branches`, {
       method: "POST",
-      body: JSON.stringify({ new_branch_name: branch, old_branch_name: from }),
+      body: JSON.stringify({
+        new_branch_name: branch,
+        old_branch_name: from,
+      }),
     });
   }
   createOrUpdateFile(
@@ -158,7 +162,10 @@ export class ForgejoProvider implements GitPlatformProvider {
     sha?: string,
   ) {
     return this.request(
-      `${this.r(ref)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+      `${this.r(ref)}/contents/${path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`,
       {
         method: sha ? "PUT" : "POST",
         body: JSON.stringify({
@@ -178,7 +185,10 @@ export class ForgejoProvider implements GitPlatformProvider {
     message: string,
   ) {
     return this.request(
-      `${this.r(ref)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+      `${this.r(ref)}/contents/${path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`,
       { method: "DELETE", body: JSON.stringify({ branch, sha, message }) },
     );
   }
@@ -283,7 +293,11 @@ export class ForgejoProvider implements GitPlatformProvider {
       body: JSON.stringify(input),
     });
   }
-  mergePullRequest(ref: RepoRef, n: number, input: Record<string, unknown>) {
+  mergePullRequest(
+    ref: RepoRef,
+    n: number,
+    input: Record<string, unknown>,
+  ) {
     return this.request(`${this.r(ref)}/pulls/${n}/merge`, {
       method: "POST",
       body: JSON.stringify(input),
