@@ -1,0 +1,9 @@
+repositories:
+  heyu/example-service:
+    access: write
+    allowed_work_branch_patterns: ["chatgpt/*"]
+    protected_branches: ["main", "release/*"]
+    allow_direct_push: false
+    allow_issue_write: true
+    allow_pull_request_write: true
+    allow_merge: true
