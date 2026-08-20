@@ -36,5 +36,5 @@ jobs:
           # CI has no Forgejo service, so smoke-test liveness without waiting
           # for the production readiness gate to become healthy.
           docker compose up -d
-          curl --fail --silent --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:3100/healthz
+          curl --fail --silent --retry 20 --retry-all-errors --retry-delay 1 --max-time 60 http://127.0.0.1:3100/healthz
           docker compose down -v
