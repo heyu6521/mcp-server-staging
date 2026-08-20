@@ -7,7 +7,7 @@ This repository does not deploy itself. Start with a disposable Forgejo reposito
 1. Check out the reviewed commit or PR merge and record its commit ID.
 2. Copy `.env.example` to `.env` and `config/repositories.example.yaml` to `config/repositories.yaml`.
 3. Generate independent random values for `BEARER_TOKEN` (at least 16 bytes) and `CONFIRMATION_SECRET` (at least 32 bytes), set the Forgejo service-account token, and replace every placeholder.
-4. On Linux, run `chmod 600 .env config/repositories.yaml`. Restrict their owner to the deployment account. Never commit either file, put them in an image, or send them to the Docker build context.
+4. On Linux, run `chmod 600 .env`. Give `config/repositories.yaml` to the deployment account and the container's configured group, with mode `0640` (for the default Compose user, use the group ID configured by `user: 1000:999`). Verify the non-root container can read it before rollout. Never commit either file, put them in an image, or send them to the Docker build context.
 5. Keep the published MCP endpoint at `127.0.0.1:3100`. A container's `HOST=0.0.0.0` is required for Docker port forwarding and does not change the host-side loopback binding.
 
 The current application reads secrets from environment variables. Compose `env_file` therefore remains the supported deployment mechanism. Docker Compose secrets are not yet wired into the application (`*_FILE` variables are not supported); adding a secret mount alone would not work. Treat `.env` as a sensitive deployment file and note that environment values may be visible to users allowed to inspect Docker containers.
@@ -50,6 +50,8 @@ unset MCP_BEARER_TOKEN
 `/healthz` proves only that the HTTP process is alive. `/readyz` is authenticated and calls Forgejo; it must succeed before MCP discovery or writes are attempted. Compose overrides the image liveness probe with this authenticated readiness check, so `up --wait` also fails closed when Forgejo or its credentials are unavailable.
 
 Then perform MCP discovery and one read call against the disposable repository. Validate, in order:
+
+MCP 2026-07-28 does not use the legacy `initialize` request shape. Every request must carry the modern `_meta` envelope (`io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`), together with the matching `MCP-Protocol-Version` and `Mcp-Method` headers. A `tools/call` request must also carry the matching `Mcp-Name` header. A 400 `UnsupportedProtocolVersion` response to a legacy-shaped `initialize` request is therefore expected, not a failed deployment.
 
 1. repository and file reads;
 2. branch creation and expected-SHA conflict behavior;

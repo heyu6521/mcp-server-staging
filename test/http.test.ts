@@ -40,6 +40,11 @@ const base: RuntimeConfig = {
 };
 const provider = { getMe: async () => ({ login: "bot" }) } as any;
 
+const modernEnvelope = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+};
+
 describe("http", () => {
   it("health does not leak internals", async () => {
     const r = await request(createApp(base, provider))
@@ -64,5 +69,43 @@ describe("http", () => {
       .get("/readyz")
       .set("Host", "localhost");
     expect(r.status).toBe(401);
+  });
+  it("serves a 2026-07-28 tools/list request with the required envelope", async () => {
+    const r = await request(createApp(base, provider))
+      .post("/mcp")
+      .set("Host", "localhost")
+      .set("Accept", "application/json")
+      .set("MCP-Protocol-Version", "2026-07-28")
+      .set("Mcp-Method", "tools/list")
+      .send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        params: { _meta: modernEnvelope },
+      });
+    expect(r.status).toBe(200);
+    expect(
+      r.body.result.tools.some(
+        (tool: { name: string }) => tool.name === "get_me",
+      ),
+    ).toBe(true);
+  });
+  it("rejects the legacy initialize handshake", async () => {
+    const r = await request(createApp(base, provider))
+      .post("/mcp")
+      .set("Host", "localhost")
+      .set("Accept", "application/json")
+      .send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2026-07-28",
+          capabilities: {},
+          clientInfo: { name: "legacy-shape-test", version: "1.0.0" },
+        },
+      });
+    expect(r.status).toBe(400);
+    expect(r.body.error.code).toBe(-32022);
   });
 });
