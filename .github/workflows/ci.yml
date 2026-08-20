@@ -1,0 +1,38 @@
+name: ci
+on:
+  push:
+    branches: [main, feat/forgejo-git-mcp]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Basic secret scan
+        run: |
+          if git grep -nE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|FORGEJO_TOKEN=.{8,}' -- ':!package-lock.json'; then
+            echo 'Potential secret detected'
+            exit 1
+          fi
+      - run: npm audit --omit=dev --audit-level=critical
+      - run: docker build -t git-readwrite-mcp:ci .
+      - name: Compose config and smoke test
+        run: |
+          cp .env.example .env
+          cp config/repositories.example.yaml config/repositories.yaml
+          docker compose config >/tmp/compose-rendered.yaml
+          docker compose up -d --wait
+          curl --fail --silent http://127.0.0.1:3100/healthz
+          docker compose down -v
