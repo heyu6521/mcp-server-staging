@@ -115,7 +115,9 @@ export class ForgejoProvider implements GitPlatformProvider {
     );
   }
   listBranches(ref: RepoRef, page: number, perPage: number) {
-    return this.request(`${this.r(ref)}/branches?page=${page}&limit=${perPage}`);
+    return this.request(
+      `${this.r(ref)}/branches?page=${page}&limit=${perPage}`,
+    );
   }
   listTags(ref: RepoRef, page: number, perPage: number) {
     return this.request(`${this.r(ref)}/tags?page=${page}&limit=${perPage}`);
@@ -132,7 +134,9 @@ export class ForgejoProvider implements GitPlatformProvider {
     return this.request(`${this.r(ref)}/commits?${q}`);
   }
   getCommit(ref: RepoRef, sha: string) {
-    return this.request(`${this.r(ref)}/git/commits/${encodeURIComponent(sha)}`);
+    return this.request(
+      `${this.r(ref)}/git/commits/${encodeURIComponent(sha)}`,
+    );
   }
   searchCode(ref: RepoRef, query: string, page: number, perPage: number) {
     return this.request(
@@ -293,11 +297,7 @@ export class ForgejoProvider implements GitPlatformProvider {
       body: JSON.stringify(input),
     });
   }
-  mergePullRequest(
-    ref: RepoRef,
-    n: number,
-    input: Record<string, unknown>,
-  ) {
+  mergePullRequest(ref: RepoRef, n: number, input: Record<string, unknown>) {
     return this.request(`${this.r(ref)}/pulls/${n}/merge`, {
       method: "POST",
       body: JSON.stringify(input),
