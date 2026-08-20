@@ -1,0 +1,19 @@
+services:
+  mcp:
+    build: .
+    image: git-readwrite-mcp:local
+    restart: unless-stopped
+    ports: ["127.0.0.1:3100:3000"]
+    env_file: [.env]
+    volumes:
+      - ./config/repositories.yaml:/run/config/repositories.yaml:ro
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
