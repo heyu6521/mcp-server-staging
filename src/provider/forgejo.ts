@@ -452,4 +452,3 @@ export class ForgejoProvider implements GitPlatformProvider {
     });
   }
 }
-

@@ -167,4 +167,3 @@ describe("Forgejo provider contracts", () => {
     });
   });
 });
-

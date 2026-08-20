@@ -9,4 +9,3 @@ Forgejo 15.0.5 exposes only read operations for the git-data blob/tree/commit/re
 PR review writes are restricted to the confirmed operations: create via `POST pulls/{index}/reviews`, or submit an existing pending review via `POST pulls/{index}/reviews/{id}`. Other review methods are rejected by the MCP schema. Merge requests send the required `Do`, the expected `head_commit_id`, and Forgejo's exact `MergeTitleField` / `MergeMessageField` names, then re-read the PR to verify the merged state.
 
 Forgejo 15.0.5 does not expose a `draft` field in `CreatePullRequestOption`. Draft state is derived from the configured work-in-progress title prefixes (defaults: `WIP:` and `[WIP]:`). The provider maps `draft=true` to `WIP:` and verifies the returned draft state; it does not send the unsupported field.
-
