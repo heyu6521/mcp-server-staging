@@ -8,6 +8,7 @@ type Json =
   | number
   | boolean
   | null;
+type ResponseMode = "json" | "text";
 
 export class ForgejoProvider implements GitPlatformProvider {
   constructor(
@@ -15,7 +16,21 @@ export class ForgejoProvider implements GitPlatformProvider {
     private readonly token: string | undefined,
     private readonly timeoutMs: number,
   ) {}
-  private async request(path: string, init: RequestInit = {}): Promise<Json> {
+  private async request(
+    path: string,
+    init?: RequestInit,
+    responseMode?: "json",
+  ): Promise<Json>;
+  private async request(
+    path: string,
+    init: RequestInit,
+    responseMode: "text",
+  ): Promise<string>;
+  private async request(
+    path: string,
+    init: RequestInit = {},
+    responseMode: ResponseMode = "json",
+  ): Promise<Json | string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -30,16 +45,17 @@ export class ForgejoProvider implements GitPlatformProvider {
         },
       });
       const text = await res.text();
-      let data: Json = null;
-      if (text) {
+      let data: Json | string = responseMode === "text" ? text : null;
+      if (text && responseMode === "json") {
         try {
           data = JSON.parse(text) as Json;
         } catch {
-          throw new AppError(
-            "upstream_error",
-            "Forgejo returned invalid JSON",
-            502,
-          );
+          if (res.ok)
+            throw new AppError(
+              "upstream_error",
+              "Forgejo returned invalid JSON",
+              502,
+            );
         }
       }
       if (!res.ok) {
@@ -117,6 +133,11 @@ export class ForgejoProvider implements GitPlatformProvider {
   listBranches(ref: RepoRef, page: number, perPage: number) {
     return this.request(
       `${this.r(ref)}/branches?page=${page}&limit=${perPage}`,
+    );
+  }
+  getBranch(ref: RepoRef, branch: string) {
+    return this.request(
+      `${this.r(ref)}/branches/${encodeURIComponent(branch)}`,
     );
   }
   listTags(ref: RepoRef, page: number, perPage: number) {
@@ -252,14 +273,15 @@ export class ForgejoProvider implements GitPlatformProvider {
   }
   getPullRequestSubresource(ref: RepoRef, n: number, m: string) {
     const paths: Record<string, string> = {
-      get_diff: `pulls/${n}.diff`,
       get_files: `pulls/${n}/files`,
       get_commits: `pulls/${n}/commits`,
       get_reviews: `pulls/${n}/reviews`,
       get_review_comments: `pulls/${n}/comments`,
       get_comments: `issues/${n}/comments`,
-      get_status: `pulls/${n}`,
     };
+    if (m === "get_diff")
+      return this.request(`${this.r(ref)}/pulls/${n}.diff`, {}, "text");
+    if (m === "get_status") return this.getPullRequestStatus(ref, n);
     const p = paths[m];
     if (!p)
       throw new AppError(
@@ -268,6 +290,29 @@ export class ForgejoProvider implements GitPlatformProvider {
         400,
       );
     return this.request(`${this.r(ref)}/${p}`);
+  }
+  async getPullRequestStatus(ref: RepoRef, n: number) {
+    const pr = await this.getPullRequest(ref, n);
+    if (!pr || Array.isArray(pr) || typeof pr !== "object")
+      throw new AppError(
+        "upstream_error",
+        "Forgejo PR response is invalid",
+        502,
+      );
+    const head = pr.head;
+    if (!head || Array.isArray(head) || typeof head !== "object")
+      throw new AppError("upstream_error", "Forgejo PR head is missing", 502);
+    const sha = (head as Record<string, unknown>).sha;
+    if (typeof sha !== "string" || !sha)
+      throw new AppError(
+        "upstream_error",
+        "Forgejo PR head SHA is missing",
+        502,
+      );
+    const status = await this.request(
+      `${this.r(ref)}/commits/${encodeURIComponent(sha)}/status`,
+    );
+    return { headSha: sha, status };
   }
   createPullRequest(ref: RepoRef, input: Record<string, unknown>) {
     return this.request(`${this.r(ref)}/pulls`, {
@@ -293,6 +338,17 @@ export class ForgejoProvider implements GitPlatformProvider {
     input: Record<string, unknown>,
   ) {
     return this.request(`${this.r(ref)}/pulls/${n}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+  submitPullRequestReview(
+    ref: RepoRef,
+    n: number,
+    reviewId: number,
+    input: Record<string, unknown>,
+  ) {
+    return this.request(`${this.r(ref)}/pulls/${n}/reviews/${reviewId}`, {
       method: "POST",
       body: JSON.stringify(input),
     });

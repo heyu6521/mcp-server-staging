@@ -11,3 +11,4 @@ secrets/
 data/
 repos/
 config/acl.yaml
+config/repositories.yaml

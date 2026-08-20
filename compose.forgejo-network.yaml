@@ -1,0 +1,10 @@
+services:
+  mcp:
+    networks:
+      - default
+      - forgejo
+
+networks:
+  forgejo:
+    external: true
+    name: ${FORGEJO_DOCKER_NETWORK:?set FORGEJO_DOCKER_NETWORK to the existing Forgejo network name}

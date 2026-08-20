@@ -42,6 +42,15 @@ describe("policy", () => {
     expect(() => p.assertWorkBranch(r, "main")).toThrow();
     expect(() => p.assertWorkBranch(r, "chatgpt/x")).not.toThrow();
   });
+  it("enforces protected branch direct-push policy", () => {
+    const p = new PolicyService(policy);
+    const r = p.assertWrite("heyu", "repo");
+    expect(() => p.assertWritableBranch(r, "main")).toThrow();
+    expect(() => p.assertWritableBranch(r, "chatgpt/x")).not.toThrow();
+    expect(() =>
+      p.assertWritableBranch({ ...r, allow_direct_push: true }, "main"),
+    ).not.toThrow();
+  });
   it("blocks sensitive and traversal paths", () => {
     expect(() => assertSafeRepoPath("../x")).toThrow();
     expect(() => assertSafeRepoPath(".env")).toThrow();

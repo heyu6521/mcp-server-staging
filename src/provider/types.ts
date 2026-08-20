@@ -17,6 +17,7 @@ export interface GitPlatformProvider {
     gitRef?: string,
   ): Promise<unknown>;
   listBranches(ref: RepoRef, page: number, perPage: number): Promise<unknown>;
+  getBranch(ref: RepoRef, branch: string): Promise<unknown>;
   listTags(ref: RepoRef, page: number, perPage: number): Promise<unknown>;
   listCommits(
     ref: RepoRef,
@@ -79,6 +80,10 @@ export interface GitPlatformProvider {
     pullNumber: number,
     method: string,
   ): Promise<unknown>;
+  getPullRequestStatus(
+    ref: RepoRef,
+    pullNumber: number,
+  ): Promise<{ headSha: string; status: unknown }>;
   createPullRequest(
     ref: RepoRef,
     input: Record<string, unknown>,
@@ -96,6 +101,12 @@ export interface GitPlatformProvider {
   createPullRequestReview(
     ref: RepoRef,
     pullNumber: number,
+    input: Record<string, unknown>,
+  ): Promise<unknown>;
+  submitPullRequestReview(
+    ref: RepoRef,
+    pullNumber: number,
+    reviewId: number,
     input: Record<string, unknown>,
   ): Promise<unknown>;
   mergePullRequest(

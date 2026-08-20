@@ -33,6 +33,18 @@ export class PolicyService {
         403,
       );
   }
+  assertWritableBranch(rule: RepositoryRule, branch: string): void {
+    if (this.isProtected(rule, branch)) {
+      if (!rule.allow_direct_push)
+        throw new AppError(
+          "forbidden",
+          "Direct writes to protected branches are disabled",
+          403,
+        );
+      return;
+    }
+    this.assertWorkBranch(rule, branch);
+  }
   isProtected(rule: RepositoryRule, branch: string): boolean {
     return rule.protected_branches.some((p) => match(p, branch));
   }

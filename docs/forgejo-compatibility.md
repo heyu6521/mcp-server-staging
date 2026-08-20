@@ -2,8 +2,8 @@
 
 Target: Forgejo 15.0.5, compatibility identifier `gitea-1.22.0`.
 
-The provider uses the stable `/api/v1` repository, contents, branch, issue and pull-request families. Exact pending-review behavior and git-data blob/tree/commit/ref write semantics vary across Forgejo/Gitea releases and must be confirmed against the target-compatible mock/container before enabling them.
+The target server's exported `swagger.v1.json` was checked directly. It confirms exact branch lookup, textual `pulls/{index}.diff`, combined commit status, Contents API writes, pull-review create/submit, and pull-request merge endpoints used by the provider.
 
-`push_files` therefore fails closed in v0.1 rather than silently using multiple Contents API writes. The low-level public `git` toolset is not registered by the current implementation even if selected; enabling it is blocked until compatibility tests establish exact endpoint and fast-forward semantics.
+Forgejo 15.0.5 exposes only read operations for the git-data blob/tree/commit/ref API families. It does not expose the create-blob/create-tree/create-commit/create-ref operations needed for an atomic multi-file commit. `push_files` therefore fails closed in v0.1 rather than silently using multiple Contents API writes. The low-level public `git` toolset remains unregistered.
 
-PR review subresource support is best-effort through Forgejo review endpoints. Unsupported server behavior must surface as an upstream error; no fabricated success is permitted.
+PR review writes are restricted to the confirmed operations: create via `POST pulls/{index}/reviews`, or submit an existing pending review via `POST pulls/{index}/reviews/{id}`. Other review methods are rejected by the MCP schema. Merge requests send the required `Do`, the expected `head_commit_id`, and Forgejo's exact `MergeTitleField` / `MergeMessageField` names, then re-read the PR to verify the merged state.

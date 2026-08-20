@@ -20,7 +20,7 @@ High-risk deletion and merge operations use a signed five-minute prepare/apply t
 
 ## Configuration
 
-Copy `.env.example` to `.env` and `config/repositories.example.yaml` to `config/repositories.yaml`. Never commit a real token or real repository policy.
+Copy `.env.example` to `.env` and `config/repositories.example.yaml` to `config/repositories.yaml`. Set `.env` mode to `0600`. Never commit a real token or real repository policy; both files are excluded from the Git context and the Docker build context.
 
 - `MCP_TOOLSETS=default|all|context,repos,issues,pull_requests,git`
 - `MCP_TOOLS=...` adds individual implemented tools
@@ -29,7 +29,7 @@ Copy `.env.example` to `.env` and `config/repositories.example.yaml` to `config/
 - `MCP_LOCKDOWN_MODE=true` restricts access to the repository allowlist
 - `AUTH_MODE=none|bearer`; `none` is allowed only on loopback
 
-Compose publishes only `127.0.0.1:3100:3000`. ChatGPT Business is expected to reach it through an independently operated Secure MCP Tunnel; Codex/operations may use Tailscale when explicitly configured. This repository does not deploy a tunnel, OAuth server, reverse proxy, or public listener.
+Compose publishes only `127.0.0.1:3100:3000`. It can reach Forgejo through the host gateway or an explicitly selected external Docker network; neither a real address nor a network name is hard-coded. ChatGPT Business is expected to reach it through an independently operated Secure MCP Tunnel in a later, separately reviewed deployment step; Codex/operations may use Tailscale when explicitly configured. This repository does not deploy a tunnel, OAuth server, reverse proxy, or public listener.
 
 ## Development and acceptance
 
@@ -44,7 +44,7 @@ docker build -t git-readwrite-mcp:local .
 docker compose config
 ```
 
-`GET /healthz` is liveness only and reveals no topology. `GET /readyz` verifies the repository policy and Forgejo service-account reachability.
+`GET /healthz` is unauthenticated liveness only and reveals no topology. `GET /readyz` requires the configured Bearer token and verifies Forgejo service-account reachability. Compose uses readiness, not mere liveness, as its health gate.
 
 ## Architecture
 

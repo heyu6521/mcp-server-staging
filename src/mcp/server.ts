@@ -47,6 +47,66 @@ function asObject(value: unknown): Record<string, any> {
     : {};
 }
 
+function branchHeadSha(value: unknown): string | undefined {
+  const branch = asObject(value);
+  const commit = asObject(branch.commit);
+  return typeof commit.id === "string"
+    ? commit.id
+    : typeof commit.sha === "string"
+      ? commit.sha
+      : undefined;
+}
+
+function fileBlobSha(value: unknown): string | undefined {
+  const file = asObject(value);
+  return typeof file.sha === "string" ? file.sha : undefined;
+}
+
+async function assertPullRequestMergeable(
+  provider: GitPlatformProvider,
+  ref: { owner: string; repo: string },
+  pullNumber: number,
+  expectedHeadSha: string,
+  expectedBaseSha?: string,
+): Promise<{ pr: Record<string, any>; headSha: string; baseSha: string }> {
+  const pr = asObject(await provider.getPullRequest(ref, pullNumber));
+  const headSha = asObject(pr.head).sha;
+  const baseSha = asObject(pr.base).sha;
+  if (typeof headSha !== "string" || typeof baseSha !== "string")
+    throw new AppError("upstream_error", "PR head/base SHA is missing", 502);
+  if (headSha !== expectedHeadSha)
+    throw new AppError("conflict", "PR head changed", 409);
+  if (expectedBaseSha !== undefined && baseSha !== expectedBaseSha)
+    throw new AppError("conflict", "PR base changed", 409);
+  if (pr.state !== "open")
+    throw new AppError("conflict", "PR is not open", 409);
+  if (pr.draft !== false)
+    throw new AppError(
+      "conflict",
+      "Draft or unknown-draft PR cannot be merged",
+      409,
+    );
+  if (pr.merged !== false)
+    throw new AppError(
+      "conflict",
+      "PR is merged or merge state is unknown",
+      409,
+    );
+  if (pr.mergeable !== true)
+    throw new AppError("conflict", "PR is not confirmed mergeable", 409);
+  const statusResult = await provider.getPullRequestStatus(ref, pullNumber);
+  if (statusResult.headSha !== expectedHeadSha)
+    throw new AppError("conflict", "PR head changed during status check", 409);
+  const status = asObject(statusResult.status);
+  if (status.state !== "success")
+    throw new AppError(
+      "conflict",
+      "PR head status is not confirmed successful",
+      409,
+    );
+  return { pr, headSha, baseSha };
+}
+
 export function buildMcpServer(
   config: RuntimeConfig,
   provider: GitPlatformProvider,
@@ -315,7 +375,7 @@ export function buildMcpServer(
           branch: z.string(),
           fromBranch: z.string().optional(),
           fromSha: z.string().optional(),
-          expectedSourceSha: z.string().optional(),
+          expectedSourceSha: z.string().min(4),
         })
         .refine((x) => Boolean(x.fromBranch) !== Boolean(x.fromSha), {
           message: "Provide exactly one of fromBranch or fromSha",
@@ -325,6 +385,17 @@ export function buildMcpServer(
     async (a) => {
       const rule = policy.assertWrite(a.owner, a.repo);
       policy.assertWorkBranch(rule, a.branch);
+      if (a.fromBranch) {
+        const actual = branchHeadSha(await provider.getBranch(a, a.fromBranch));
+        if (actual !== a.expectedSourceSha)
+          throw new AppError("conflict", "Source branch HEAD changed", 409);
+      } else if (a.fromSha !== a.expectedSourceSha) {
+        throw new AppError(
+          "conflict",
+          "Source SHA does not match expectation",
+          409,
+        );
+      }
       const source = a.fromBranch ?? a.fromSha;
       return textResult(await provider.createBranch(a, a.branch, source));
     },
@@ -347,12 +418,12 @@ export function buildMcpServer(
     },
     async (a) => {
       const rule = policy.assertWrite(a.owner, a.repo);
-      policy.assertWorkBranch(rule, a.branch);
+      policy.assertWritableBranch(rule, a.branch);
       assertSafeRepoPath(a.path);
-      const branches = asArray(await provider.listBranches(a, 1, 100));
-      const b = branches.find((x) => asObject(x).name === a.branch);
-      const commit = asObject(asObject(b).commit);
-      if (!b || commit.id !== a.expectedHeadSha)
+      if (
+        branchHeadSha(await provider.getBranch(a, a.branch)) !==
+        a.expectedHeadSha
+      )
         throw new AppError("conflict", "Branch HEAD changed", 409);
       return textResult(
         await provider.createOrUpdateFile(
@@ -417,8 +488,18 @@ export function buildMcpServer(
     },
     async (a) => {
       const rule = policy.assertWrite(a.owner, a.repo);
-      policy.assertWorkBranch(rule, a.branch);
+      policy.assertWritableBranch(rule, a.branch);
       assertSafeRepoPath(a.path);
+      if (
+        branchHeadSha(await provider.getBranch(a, a.branch)) !==
+        a.expectedHeadSha
+      )
+        throw new AppError("conflict", "Branch HEAD changed", 409);
+      if (
+        fileBlobSha(await provider.getFileContents(a, a.path, a.branch)) !==
+        a.sha
+      )
+        throw new AppError("conflict", "File blob changed", 409);
       const summary = {
         owner: a.owner,
         repo: a.repo,
@@ -458,7 +539,8 @@ export function buildMcpServer(
     },
     async (a) => {
       const rule = policy.assertWrite(a.owner, a.repo);
-      policy.assertWorkBranch(rule, a.branch);
+      policy.assertWritableBranch(rule, a.branch);
+      assertSafeRepoPath(a.path);
       const summary = {
         owner: a.owner,
         repo: a.repo,
@@ -467,6 +549,16 @@ export function buildMcpServer(
         sha: a.sha,
         head: a.expectedHeadSha,
       };
+      if (
+        branchHeadSha(await provider.getBranch(a, a.branch)) !==
+        a.expectedHeadSha
+      )
+        throw new AppError("conflict", "Branch HEAD changed", 409);
+      if (
+        fileBlobSha(await provider.getFileContents(a, a.path, a.branch)) !==
+        a.sha
+      )
+        throw new AppError("conflict", "File blob changed", 409);
       confirmation.consume(
         a.confirmationToken,
         config.principal,
@@ -774,21 +866,51 @@ export function buildMcpServer(
     {
       description:
         "Submit a pull request review. Pending-review support is Forgejo-version dependent.",
-      inputSchema: z.object({
-        ...repo,
-        pullNumber: z.number().int().positive(),
-        method: z.string(),
-        body: z.string().optional(),
-        event: z.enum(["APPROVE", "REQUEST_CHANGES", "COMMENT"]).optional(),
-        commitId: z.string().optional(),
-        comments: z.array(z.record(z.string(), z.unknown())).optional(),
-      }),
+      inputSchema: z
+        .object({
+          ...repo,
+          pullNumber: z.number().int().positive(),
+          method: z.enum(["create", "submit"]),
+          reviewId: z.number().int().positive().optional(),
+          body: z.string().optional(),
+          event: z.enum(["APPROVE", "REQUEST_CHANGES", "COMMENT"]).optional(),
+          commitId: z.string().optional(),
+          comments: z.array(z.record(z.string(), z.unknown())).optional(),
+        })
+        .superRefine((value, context) => {
+          if (value.method === "submit" && value.reviewId === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "reviewId is required when method=submit",
+              path: ["reviewId"],
+            });
+          if (
+            value.method === "submit" &&
+            (value.commitId !== undefined || value.comments !== undefined)
+          )
+            context.addIssue({
+              code: "custom",
+              message:
+                "commitId/comments are only supported when method=create",
+              path: ["method"],
+            });
+        }),
       ...wr,
     },
     async (a) => {
       const rule = policy.assertWrite(a.owner, a.repo);
       if (!rule.allow_pull_request_write)
         throw new AppError("forbidden", "PR writes disabled", 403);
+      if (a.method === "submit") {
+        if (a.reviewId === undefined)
+          throw new AppError("invalid_input", "reviewId is required", 400);
+        return textResult(
+          await provider.submitPullRequestReview(a, a.pullNumber, a.reviewId, {
+            body: a.body,
+            event: a.event,
+          }),
+        );
+      }
       return textResult(
         await provider.createPullRequestReview(a, a.pullNumber, {
           body: a.body,
@@ -819,19 +941,18 @@ export function buildMcpServer(
       const rule = policy.assertWrite(a.owner, a.repo);
       if (!rule.allow_merge)
         throw new AppError("forbidden", "Merge disabled", 403);
-      const pr = asObject(await provider.getPullRequest(a, a.pullNumber));
-      const head = asObject(pr.head);
-      const base = asObject(pr.base);
-      if (head.sha !== a.expectedHeadSha)
-        throw new AppError("conflict", "PR head changed", 409);
-      if (pr.draft === true)
-        throw new AppError("conflict", "Draft PR cannot be merged", 409);
+      const { baseSha } = await assertPullRequestMergeable(
+        provider,
+        a,
+        a.pullNumber,
+        a.expectedHeadSha,
+      );
       const summary = {
         owner: a.owner,
         repo: a.repo,
         pullNumber: a.pullNumber,
         head: a.expectedHeadSha,
-        base: base.sha,
+        base: baseSha,
         mergeMethod: a.mergeMethod,
       };
       return textResult({
@@ -867,17 +988,16 @@ export function buildMcpServer(
       const rule = policy.assertWrite(a.owner, a.repo);
       if (!rule.allow_merge)
         throw new AppError("forbidden", "Merge disabled", 403);
-      const pr = asObject(await provider.getPullRequest(a, a.pullNumber));
-      const base = asObject(pr.base);
-      const head = asObject(pr.head);
-      if (head.sha !== a.expectedHeadSha)
-        throw new AppError("conflict", "PR head changed", 409);
+      const initial = asObject(await provider.getPullRequest(a, a.pullNumber));
+      const initialBaseSha = asObject(initial.base).sha;
+      if (typeof initialBaseSha !== "string")
+        throw new AppError("upstream_error", "PR base SHA is missing", 502);
       const summary = {
         owner: a.owner,
         repo: a.repo,
         pullNumber: a.pullNumber,
         head: a.expectedHeadSha,
-        base: base.sha,
+        base: initialBaseSha,
         mergeMethod: a.mergeMethod,
       };
       confirmation.consume(
@@ -886,13 +1006,23 @@ export function buildMcpServer(
         "merge_pull_request",
         summary,
       );
-      return textResult(
-        await provider.mergePullRequest(a, a.pullNumber, {
-          Do: a.mergeMethod,
-          merge_title_field: a.commitTitle,
-          merge_message_field: a.commitMessage,
-        }),
+      await assertPullRequestMergeable(
+        provider,
+        a,
+        a.pullNumber,
+        a.expectedHeadSha,
+        initialBaseSha,
       );
+      const merge = await provider.mergePullRequest(a, a.pullNumber, {
+        Do: a.mergeMethod,
+        head_commit_id: a.expectedHeadSha,
+        MergeTitleField: a.commitTitle,
+        MergeMessageField: a.commitMessage,
+      });
+      const after = asObject(await provider.getPullRequest(a, a.pullNumber));
+      if (after.merged !== true)
+        throw new AppError("upstream_error", "Merge was not verified", 502);
+      return textResult({ merge, verifiedPullRequest: after });
     },
   );
 
