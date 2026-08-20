@@ -61,7 +61,7 @@ describe("http", () => {
       bearerToken: "test-token",
     };
     const r = await request(createApp(cfg, provider))
-      .get("/healthz")
+      .get("/readyz")
       .set("Host", "localhost");
     expect(r.status).toBe(401);
   });
