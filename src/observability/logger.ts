@@ -19,7 +19,8 @@ export function log(
   event: string,
   fields: Record<string, unknown> = {},
 ): void {
+  const safeFields = redact(fields) as Record<string, unknown>;
   process.stdout.write(
-    `${JSON.stringify({ ts: new Date().toISOString(), level, event, ...redact(fields) })}\n`,
+    `${JSON.stringify({ ts: new Date().toISOString(), level, event, ...safeFields })}\n`,
   );
 }
