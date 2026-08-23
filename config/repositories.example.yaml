@@ -1,0 +1,11 @@
+repositories:
+  # A fixed owner with `/*` dynamically includes current and future repositories.
+  # Exact owner/repository rules may coexist and take precedence.
+  heyu/*:
+    access: write
+    allowed_work_branch_patterns: ["chatgpt/*"]
+    protected_branches: ["main", "release/*"]
+    allow_direct_push: false
+    allow_issue_write: true
+    allow_pull_request_write: true
+    allow_merge: true
