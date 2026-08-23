@@ -70,6 +70,23 @@ describe("http", () => {
       .set("Host", "localhost");
     expect(r.status).toBe(401);
   });
+  it.each([
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-protected-resource",
+  ])(
+    "reports unsupported OAuth discovery before bearer auth at %s",
+    async (path) => {
+      const cfg: RuntimeConfig = {
+        ...base,
+        authMode: "bearer",
+        bearerToken: "test-token",
+      };
+      const r = await request(createApp(cfg, provider))
+        .get(path)
+        .set("Host", "localhost");
+      expect(r.status).toBe(404);
+    },
+  );
   it("serves a 2026-07-28 tools/list request with the required envelope", async () => {
     const r = await request(createApp(base, provider))
       .post("/mcp")

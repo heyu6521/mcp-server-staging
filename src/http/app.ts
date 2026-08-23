@@ -42,6 +42,13 @@ export function createApp(
   });
   app.use(express.json({ limit: "2mb" }));
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+  app.get(
+    [
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/oauth-protected-resource",
+    ],
+    (_req, res) => res.sendStatus(404),
+  );
   const allBucket: Bucket = { minute: 0, count: 0 };
   const writeBucket: Bucket = { minute: 0, count: 0 };
   let inFlight = 0;
