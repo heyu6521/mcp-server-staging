@@ -107,22 +107,24 @@ describe("http", () => {
       ),
     ).toBe(true);
   });
-  it("rejects the legacy initialize handshake", async () => {
+  it("accepts the OpenAI tunnel-client 2025-06-18 handshake", async () => {
     const r = await request(createApp(base, provider))
       .post("/mcp")
       .set("Host", "localhost")
-      .set("Accept", "application/json")
+      .set("Accept", "application/json, text/event-stream")
       .send({
         jsonrpc: "2.0",
         id: 1,
         method: "initialize",
         params: {
-          protocolVersion: "2026-07-28",
+          protocolVersion: "2025-06-18",
           capabilities: {},
-          clientInfo: { name: "legacy-shape-test", version: "1.0.0" },
+          clientInfo: { name: "tunnel-client", version: "0.0.12" },
         },
       });
-    expect(r.status).toBe(400);
-    expect(r.body.error.code).toBe(-32022);
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toContain("text/event-stream");
+    expect(r.text).toContain('"protocolVersion":"2025-06-18"');
+    expect(r.text).toContain('"serverInfo"');
   });
 });

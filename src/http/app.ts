@@ -111,7 +111,10 @@ export function createApp(
   const confirmation = new ConfirmationService(config.confirmationSecret);
   const handler = createMcpHandler(
     () => buildMcpServer(config, provider, confirmation),
-    { legacy: "reject" },
+    // OpenAI's official tunnel-client v0.0.12 initializes with the
+    // 2025-06-18 wire protocol. Keep legacy requests stateless so each HTTP
+    // request still receives an isolated McpServer instance.
+    { legacy: "stateless" },
   );
   const node = toNodeHandler(handler);
   app.post("/mcp", (req, res) => void node(req, res, req.body));
