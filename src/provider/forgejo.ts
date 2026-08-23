@@ -110,13 +110,89 @@ export class ForgejoProvider implements GitPlatformProvider {
     perPage: number,
     allowlist: string[],
   ) {
-    const out: unknown[] = [];
-    for (const full of allowlist) {
-      const [owner, repo] = full.split("/");
-      if (owner && repo && full.toLowerCase().includes(query.toLowerCase()))
-        out.push(await this.getRepository({ owner, repo }));
+    const repositories = await this.discoverAllowedRepositories(allowlist);
+    const normalizedQuery = query.toLowerCase();
+    const filtered = repositories.filter((repository) =>
+      this.repositoryFullName(repository)
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+    return filtered.slice((page - 1) * perPage, page * perPage);
+  }
+  async countAccessibleRepositories(allowlist: string[]): Promise<number> {
+    return (await this.discoverAllowedRepositories(allowlist)).length;
+  }
+  private repositoryFullName(repository: unknown): string {
+    if (
+      !repository ||
+      Array.isArray(repository) ||
+      typeof repository !== "object"
+    )
+      throw new AppError(
+        "upstream_error",
+        "Forgejo repository response is invalid",
+        502,
+      );
+    const fullName = (repository as Record<string, unknown>).full_name;
+    if (typeof fullName !== "string" || !fullName.includes("/"))
+      throw new AppError(
+        "upstream_error",
+        "Forgejo repository response is missing full_name",
+        502,
+      );
+    return fullName;
+  }
+  private async discoverAllowedRepositories(
+    allowlist: string[],
+  ): Promise<unknown[]> {
+    const exact = new Map<string, string>();
+    const owners = new Set<string>();
+    for (const selector of allowlist) {
+      const normalized = selector.toLowerCase();
+      if (normalized.endsWith("/*")) owners.add(normalized.slice(0, -2));
+      else exact.set(normalized, selector);
     }
-    return out.slice((page - 1) * perPage, page * perPage);
+
+    const discovered = new Map<string, unknown>();
+    if (owners.size > 0) {
+      const limit = 50;
+      const maxPages = 20;
+      for (let page = 1; page <= maxPages; page += 1) {
+        const response = await this.request(
+          `/user/repos?page=${page}&limit=${limit}`,
+        );
+        if (!Array.isArray(response))
+          throw new AppError(
+            "upstream_error",
+            "Forgejo repository-list response is invalid",
+            502,
+          );
+        for (const repository of response) {
+          const fullName = this.repositoryFullName(repository);
+          const owner = fullName.split("/", 1)[0]?.toLowerCase();
+          if (owner && owners.has(owner))
+            discovered.set(fullName.toLowerCase(), repository);
+        }
+        if (response.length < limit) break;
+        if (page === maxPages)
+          throw new AppError(
+            "upstream_error",
+            "Forgejo repository discovery exceeded the safety limit",
+            502,
+          );
+      }
+    }
+
+    for (const [normalized, selector] of exact) {
+      if (discovered.has(normalized)) continue;
+      const [owner, repo] = selector.split("/");
+      if (owner && repo)
+        discovered.set(normalized, await this.getRepository({ owner, repo }));
+    }
+
+    return [...discovered.values()].sort((a, b) =>
+      this.repositoryFullName(a).localeCompare(this.repositoryFullName(b)),
+    );
   }
   getRepository(ref: RepoRef) {
     return this.request(this.r(ref));

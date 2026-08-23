@@ -1,5 +1,7 @@
 repositories:
-  heyu/example-service:
+  # A fixed owner with `/*` dynamically includes current and future repositories.
+  # Exact owner/repository rules may coexist and take precedence.
+  heyu/*:
     access: write
     allowed_work_branch_patterns: ["chatgpt/*"]
     protected_branches: ["main", "release/*"]

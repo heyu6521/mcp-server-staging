@@ -41,7 +41,10 @@ const base: RuntimeConfig = {
   longRequestTimeoutMs: 100,
 };
 const provider = new Proxy(
-  { getMe: async () => ({ login: "mcp-bot" }) } as Record<string, unknown>,
+  {
+    getMe: async () => ({ login: "mcp-bot" }),
+    countAccessibleRepositories: async () => 1,
+  } as Record<string, unknown>,
   {
     get(target, prop) {
       if (prop in target) return target[prop as string];

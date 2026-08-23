@@ -177,11 +177,15 @@ export function buildMcpServer(
       ...ro,
     },
     async () => {
-      const me = await provider.getMe();
+      const selectors = policy.repositorySelectors();
+      const [me, accessibleRepositories] = await Promise.all([
+        provider.getMe(),
+        provider.countAccessibleRepositories(selectors),
+      ]);
       return textResult({
         principal: config.principal,
         forgejoUser: me.login,
-        accessibleRepositories: Object.keys(config.policy.repositories).length,
+        accessibleRepositories,
         enabledTools: [...enabled],
         readOnly: config.readOnly,
         lockdown: config.lockdown,
@@ -201,7 +205,7 @@ export function buildMcpServer(
           a.query,
           a.page,
           a.perPage,
-          Object.keys(config.policy.repositories),
+          policy.repositorySelectors(),
         ),
       ),
   );

@@ -27,6 +27,21 @@ export function loadPolicy(file: string): RepositoryPolicy {
       "Repository allowlist must not be empty",
       500,
     );
+  for (const selector of Object.keys(parsed.repositories)) {
+    const parts = selector.split("/");
+    if (
+      parts.length !== 2 ||
+      !parts[0] ||
+      !parts[1] ||
+      parts[0].includes("*") ||
+      (parts[1].includes("*") && parts[1] !== "*")
+    )
+      throw new AppError(
+        "internal_error",
+        `Invalid repository selector: ${selector}`,
+        500,
+      );
+  }
   return parsed;
 }
 

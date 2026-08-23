@@ -6,7 +6,7 @@ Forgejo content is untrusted model input. File contents, paths, diffs, issue/PR 
 
 ## Repository and path policy
 
-The deployment policy is the only repository authority. Tool inputs cannot choose the Forgejo base URL, credential, filesystem path or organization scope. Absolute paths, traversal, control characters, option-like paths, `.git`, `.env` (except `.env.example`), credential/config files and common private-key paths are blocked.
+The deployment policy is the only repository authority. It accepts exact `owner/repository` selectors and restricted fixed-owner selectors such as `heyu/*`; arbitrary-owner patterns such as `*/*` fail closed. Exact rules take precedence. Dynamic discovery uses only repositories visible to the configured Forgejo credential and filters them again through these selectors. Tool inputs cannot choose the Forgejo base URL, credential, filesystem path or organization scope. Absolute paths, traversal, control characters, option-like paths, `.git`, `.env` (except `.env.example`), credential/config files and common private-key paths are blocked.
 
 ## Writes and concurrency
 

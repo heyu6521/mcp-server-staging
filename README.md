@@ -22,6 +22,8 @@ High-risk deletion and merge operations use a signed five-minute prepare/apply t
 
 Copy `.env.example` to `.env` and `config/repositories.example.yaml` to `config/repositories.yaml`. Set `.env` mode to `0600`. Never commit a real token or real repository policy; both files are excluded from the Git context and the Docker build context.
 
+Repository selectors accept either an exact `owner/repository` or a fixed-owner wildcard such as `heyu/*`. The wildcard dynamically includes current and future repositories owned by that account, but never repositories owned by another account. Exact rules take precedence over the owner wildcard.
+
 - `MCP_TOOLSETS=default|all|context,repos,issues,pull_requests,git`
 - `MCP_TOOLS=...` adds individual implemented tools
 - `MCP_EXCLUDE_TOOLS=...` always wins

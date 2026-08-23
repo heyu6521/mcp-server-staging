@@ -10,6 +10,7 @@ export interface GitPlatformProvider {
     perPage: number,
     allowlist: string[],
   ): Promise<unknown>;
+  countAccessibleRepositories(allowlist: string[]): Promise<number>;
   getRepository(ref: RepoRef): Promise<unknown>;
   getFileContents(
     ref: RepoRef,

@@ -7,6 +7,33 @@ const ref = { owner: "heyu", repo: "repo" };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Forgejo provider contracts", () => {
+  it("discovers repositories for fixed-owner wildcard selectors", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify([
+              { full_name: "heyu/alpha" },
+              { full_name: "other/not-allowed" },
+            ]),
+            { status: 200 },
+          ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new ForgejoProvider("http://forgejo.test", "token", 1000);
+
+    await expect(
+      provider.searchRepositories("alpha", 1, 20, ["heyu/*"]),
+    ).resolves.toEqual([{ full_name: "heyu/alpha" }]);
+    await expect(
+      provider.countAccessibleRepositories(["heyu/*"]),
+    ).resolves.toBe(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/v1/user/repos",
+    );
+  });
+
   it("returns pull-request diffs as text", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("diff --git a/a b/a\n", {

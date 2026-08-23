@@ -11,10 +11,16 @@ function match(pattern: string, value: string): boolean {
 export class PolicyService {
   constructor(private readonly policy: RepositoryPolicy) {}
   rule(owner: string, repo: string): RepositoryRule {
-    const rule = this.policy.repositories[`${owner}/${repo}`];
+    const rule =
+      this.policy.repositories[`${owner}/${repo}`] ??
+      this.policy.repositories[`${owner}/*`];
     if (!rule)
       throw new AppError("forbidden", "Repository is not allowlisted", 403);
     return rule;
+  }
+
+  repositorySelectors(): string[] {
+    return Object.keys(this.policy.repositories);
   }
   assertRead(owner: string, repo: string): RepositoryRule {
     return this.rule(owner, repo);

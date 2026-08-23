@@ -51,6 +51,23 @@ describe("policy", () => {
       p.assertWritableBranch({ ...r, allow_direct_push: true }, "main"),
     ).not.toThrow();
   });
+  it("supports a fixed-owner wildcard and keeps exact rules authoritative", () => {
+    const ownerRule = {
+      ...policy.repositories["heyu/repo"],
+      access: "read" as const,
+    };
+    const p = new PolicyService({
+      repositories: {
+        "heyu/*": ownerRule,
+        "heyu/repo": policy.repositories["heyu/repo"],
+      },
+    });
+    expect(p.assertRead("heyu", "future-repo")).toBe(ownerRule);
+    expect(p.assertWrite("heyu", "repo")).toBe(
+      policy.repositories["heyu/repo"],
+    );
+    expect(() => p.assertRead("other", "repo")).toThrow();
+  });
   it("blocks sensitive and traversal paths", () => {
     expect(() => assertSafeRepoPath("../x")).toThrow();
     expect(() => assertSafeRepoPath(".env")).toThrow();
